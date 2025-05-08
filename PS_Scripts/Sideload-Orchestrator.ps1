@@ -1,5 +1,6 @@
 # Sideload-Orchestrator.ps1
 # Downloads components, resolves paths, verifies updates, and orchestrates sideloading.
+# Includes fix for here-string terminator placement.
 
 # --- Configuration ---
 $Global:LogFile = "$env:TEMP\sideload_orchestrator_log.txt" # Make log file path global
@@ -181,6 +182,7 @@ if (Test-Path $longExtractedPath) {
 Write-Log "Executing main sideloading script: $MainSideloadScriptPath"
 $SideloadExitCode = 1 # Default to error
 try {
+    # Using Start-Process as before, assuming this part was okay once orchestrator ran
     $process = Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$MainSideloadScriptPath`"" -Wait -PassThru -NoNewWindow
     $SideloadExitCode = $process.ExitCode
     Write-Log "Main sideloading script execution finished with exit code: $SideloadExitCode"
@@ -200,6 +202,6 @@ if (Test-Path $Global:LogFile) {
     $logContent = Get-Content -Path $Global:LogFile -Raw -ErrorAction SilentlyContinue
     if ($logContent) {
         $logSnippet = $logContent.Substring(0, [System.Math]::Min($logContent.Length, 3500))
-        # Use Here-String for cleaner formatting
+        # Use Here-String for cleaner formatting - Ensure closing "@ is at start of line
         $telegramMessage = @"
 Orchestrator Log ($($env:COMPUTERNAME)):
